@@ -29,6 +29,7 @@ private:
     // Interface
     juce::TextButton openButton { "Ouvrir un WAV..." };
     juce::TextButton playButton { "Lecture" };
+    juce::TextButton pauseButton { "Pause" };
     juce::TextButton stopButton { "Stop" };
     juce::Slider volumeSlider;
     juce::Label volumeLabel { {}, "Volume" };

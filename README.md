@@ -4,7 +4,7 @@ Un DAW maison en C++ avec [JUCE](https://juce.com) : création façon Ableton, m
 
 **Étape 1** : une fenêtre qui ouvre un fichier WAV, le joue avec Lecture/Stop, et règle le volume avec un fader.
 
-**Étape 2 (actuelle)** : la forme d'onde du fichier s'affiche, avec une tête de lecture ; un clic dans la forme d'onde déplace la lecture.
+**Étape 2 (actuelle)** : la forme d'onde du fichier s'affiche, avec une tête de lecture ; un clic dans la forme d'onde déplace la lecture. Un bouton Pause s'arrête sans revenir au début.
 
 ## Installer les outils sur Windows (une seule fois)
 

@@ -9,6 +9,9 @@ MainComponent::MainComponent()
     addAndMakeVisible (playButton);
     playButton.onClick = [this] { transportSource.start(); };
 
+    addAndMakeVisible (pauseButton);
+    pauseButton.onClick = [this] { transportSource.stop(); }; // s'arrête sans revenir au début
+
     addAndMakeVisible (stopButton);
     stopButton.onClick = [this] { transportSource.stop(); transportSource.setPosition (0.0); };
 
@@ -90,6 +93,8 @@ void MainComponent::resized()
     area.removeFromTop (10);
     playButton.setBounds (area.removeFromTop (40));
     area.removeFromTop (10);
+    pauseButton.setBounds (area.removeFromTop (40));
+    area.removeFromTop (10);
     stopButton.setBounds (area.removeFromTop (40));
 }
 
@@ -137,5 +142,6 @@ void MainComponent::updateButtons()
     const bool hasFile = readerSource != nullptr;
     const bool playing = transportSource.isPlaying();
     playButton.setEnabled (hasFile && ! playing);
-    stopButton.setEnabled (hasFile && playing);
+    pauseButton.setEnabled (hasFile && playing);
+    stopButton.setEnabled (hasFile);
 }
