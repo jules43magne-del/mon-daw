@@ -28,6 +28,7 @@ juce_generate_juce_header(MonDAW)
 target_sources(MonDAW PRIVATE
     Source/Main.cpp
     Source/MainComponent.cpp
+    Source/WaveformView.cpp
 )
 
 target_compile_definitions(MonDAW PRIVATE

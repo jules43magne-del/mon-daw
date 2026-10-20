@@ -9,6 +9,9 @@ MainComponent::MainComponent()
     addAndMakeVisible (playButton);
     playButton.onClick = [this] { transportSource.start(); };
 
+    addAndMakeVisible (pauseButton);
+    pauseButton.onClick = [this] { transportSource.stop(); }; // s'arrête sans revenir au début
+
     addAndMakeVisible (stopButton);
     stopButton.onClick = [this] { transportSource.stop(); transportSource.setPosition (0.0); };
 
@@ -23,13 +26,14 @@ MainComponent::MainComponent()
     volumeLabel.setJustificationType (juce::Justification::centred);
     addAndMakeVisible (volumeLabel);
     addAndMakeVisible (fileLabel);
+    addAndMakeVisible (waveformView);
 
     formatManager.registerBasicFormats();
     transportSource.addChangeListener (this);
     transportSource.setGain ((float) volumeSlider.getValue());
     updateButtons();
 
-    setSize (500, 320);
+    setSize (700, 460);
 
     // 0 entrée, 2 sorties (stéréo)
     setAudioChannels (0, 2);
@@ -71,6 +75,10 @@ void MainComponent::resized()
 {
     auto area = getLocalBounds().reduced (16);
 
+    // Bande du bas : la forme d'onde
+    waveformView.setBounds (area.removeFromBottom (140));
+    area.removeFromBottom (16);
+
     // Colonne de droite : le fader
     auto faderArea = area.removeFromRight (90);
     volumeLabel.setBounds (faderArea.removeFromTop (24));
@@ -84,6 +92,8 @@ void MainComponent::resized()
     fileLabel.setBounds (area.removeFromTop (24));
     area.removeFromTop (10);
     playButton.setBounds (area.removeFromTop (40));
+    area.removeFromTop (10);
+    pauseButton.setBounds (area.removeFromTop (40));
     area.removeFromTop (10);
     stopButton.setBounds (area.removeFromTop (40));
 }
@@ -109,6 +119,7 @@ void MainComponent::openButtonClicked()
             transportSource.setSource (newSource.get(), 0, nullptr, reader->sampleRate);
             readerSource = std::move (newSource);
             fileLabel.setText (file.getFileName(), juce::dontSendNotification);
+            waveformView.setFile (file);
             updateButtons();
         }
     });
@@ -131,5 +142,6 @@ void MainComponent::updateButtons()
     const bool hasFile = readerSource != nullptr;
     const bool playing = transportSource.isPlaying();
     playButton.setEnabled (hasFile && ! playing);
-    stopButton.setEnabled (hasFile && playing);
+    pauseButton.setEnabled (hasFile && playing);
+    stopButton.setEnabled (hasFile);
 }

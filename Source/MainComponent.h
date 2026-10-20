@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "WaveformView.h"
 
 // Le contenu de la fenêtre : boutons, fader de volume, et lecture audio.
 // AudioAppComponent nous donne directement accès à la carte son.
@@ -28,6 +29,7 @@ private:
     // Interface
     juce::TextButton openButton { "Ouvrir un WAV..." };
     juce::TextButton playButton { "Lecture" };
+    juce::TextButton pauseButton { "Pause" };
     juce::TextButton stopButton { "Stop" };
     juce::Slider volumeSlider;
     juce::Label volumeLabel { {}, "Volume" };
@@ -38,6 +40,9 @@ private:
     std::unique_ptr<juce::AudioFormatReaderSource> readerSource;  // le fichier ouvert
     juce::AudioTransportSource transportSource;                   // lecture / stop / volume
     std::unique_ptr<juce::FileChooser> chooser;
+
+    // Déclaré après formatManager et transportSource, car il les utilise.
+    WaveformView waveformView { formatManager, transportSource };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
