@@ -12,6 +12,9 @@ public:
     // Charge un fichier dans la piste. Renvoie false si le fichier n'est pas lisible.
     bool loadFile (const juce::File& file);
 
+    // Vide la piste (plus de fichier).
+    void clear();
+
     bool hasFile() const                  { return readerSource != nullptr; }
     juce::File getFile() const            { return loadedFile; }
     double getLengthInSeconds() const     { return lengthInSeconds; }

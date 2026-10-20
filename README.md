@@ -8,7 +8,9 @@ Un DAW maison en C++ avec [JUCE](https://juce.com) : création façon Ableton, m
 
 **Étape 3** : un vumètre stéréo à côté du fader montre le niveau du son en direct.
 
-**Étape 4 (actuelle)** : 4 pistes jouées ensemble. En haut, la vue Édition (une forme d'onde par piste, sur une échelle de temps commune). En bas, la console de mixage façon Pro Tools : pour chaque piste Mute, Solo, panoramique, fader et vumètre, plus un Master.
+**Étape 4** : 4 pistes jouées ensemble. En haut, la vue Édition (une forme d'onde par piste, sur une échelle de temps commune). En bas, la console de mixage façon Pro Tools : pour chaque piste Mute, Solo, panoramique, fader et vumètre, plus un Master.
+
+**Étape 5 (actuelle)** : les boutons « Enregistrer... » et « Ouvrir... » sauvent et rouvrent une session (`.mondaw`) avec les sons de chaque piste et tous les réglages.
 
 ## Installer les outils sur Windows (une seule fois)
 
@@ -47,9 +49,8 @@ Plus simple encore : dans Visual Studio, **Fichier > Ouvrir > Dossier** sur `mon
 | `Source/WaveformView.h/.cpp` | Dessine une forme d'onde et la tête de lecture. |
 | `Source/LevelMeter.h/.cpp` | Le vumètre : reçoit le niveau depuis le thread audio et le dessine. |
 
-Pour apprendre les bases du C++ en lien avec ce code, lis [BASES_CPP.md](BASES_CPP.md).
+Pour comprendre chaque étape en détail, avec des exercices, lis [GUIDE_ETAPES.md](GUIDE_ETAPES.md). Pour les bases du C++ en lien avec ce code, lis [BASES_CPP.md](BASES_CPP.md).
 
 ## Prochaines étapes
 
-1. Enregistrer et rouvrir une session (quelles pistes, quels réglages).
-2. Déplacer les fichiers dans le temps (des « clips » placés sur une ligne de temps), puis passer à Tracktion Engine pour la partie création façon Ableton.
+Voir la fin de [GUIDE_ETAPES.md](GUIDE_ETAPES.md#la-suite-prévue).

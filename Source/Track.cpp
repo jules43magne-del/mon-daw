@@ -22,6 +22,14 @@ bool Track::loadFile (const juce::File& file)
     return true;
 }
 
+void Track::clear()
+{
+    transport.setSource (nullptr);
+    readerSource.reset();
+    loadedFile = juce::File();
+    lengthInSeconds = 0.0;
+}
+
 void Track::seek (double seconds)
 {
     transport.setPosition (seconds);

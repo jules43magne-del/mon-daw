@@ -12,6 +12,12 @@ public:
 
     WaveformView& getWaveform() { return waveform; }
 
+    // Charge un fichier dans la piste et met l'affichage à jour. Renvoie false si le fichier est illisible.
+    bool loadFile (const juce::File& file);
+
+    // Vide la piste et son affichage.
+    void clear();
+
     // Appelé après le chargement d'un fichier, pour que la fenêtre se mette à jour.
     std::function<void()> onFileLoaded;
 

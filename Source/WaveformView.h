@@ -16,6 +16,9 @@ public:
     // À appeler quand un nouveau fichier est ouvert.
     void setFile (const juce::File& file);
 
+    // Efface la forme d'onde (piste vide).
+    void clear();
+
     // Durée totale affichée (en secondes), commune à toutes les pistes pour qu'elles soient alignées.
     // 0 = utiliser la durée du fichier.
     void setTimelineLength (double seconds);
