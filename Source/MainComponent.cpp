@@ -25,6 +25,7 @@ MainComponent::MainComponent()
 
     volumeLabel.setJustificationType (juce::Justification::centred);
     addAndMakeVisible (volumeLabel);
+    addAndMakeVisible (levelMeter);
     addAndMakeVisible (fileLabel);
     addAndMakeVisible (waveformView);
 
@@ -59,6 +60,10 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
     }
 
     transportSource.getNextAudioBlock (bufferToFill);
+
+    // Mesure le pic de chaque canal (après le volume) et l'envoie au vumètre.
+    for (int ch = 0; ch < bufferToFill.buffer->getNumChannels(); ++ch)
+        levelMeter.setLevel (ch, bufferToFill.buffer->getMagnitude (ch, bufferToFill.startSample, bufferToFill.numSamples));
 }
 
 void MainComponent::releaseResources()
@@ -79,9 +84,12 @@ void MainComponent::resized()
     waveformView.setBounds (area.removeFromBottom (140));
     area.removeFromBottom (16);
 
-    // Colonne de droite : le fader
-    auto faderArea = area.removeFromRight (90);
+    // Colonne de droite : le fader et, à côté, le vumètre
+    auto faderArea = area.removeFromRight (130);
     volumeLabel.setBounds (faderArea.removeFromTop (24));
+    auto meterArea = faderArea.removeFromRight (30);
+    levelMeter.setBounds (meterArea.withTrimmedBottom (24)); // s'arrête au-dessus de la case du volume
+    faderArea.removeFromRight (10);
     volumeSlider.setBounds (faderArea);
 
     area.removeFromRight (16);

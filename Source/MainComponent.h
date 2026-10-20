@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "WaveformView.h"
+#include "LevelMeter.h"
 
 // Le contenu de la fenêtre : boutons, fader de volume, et lecture audio.
 // AudioAppComponent nous donne directement accès à la carte son.
@@ -33,6 +34,7 @@ private:
     juce::TextButton stopButton { "Stop" };
     juce::Slider volumeSlider;
     juce::Label volumeLabel { {}, "Volume" };
+    LevelMeter levelMeter;
     juce::Label fileLabel { {}, "Aucun fichier" };
 
     // Audio

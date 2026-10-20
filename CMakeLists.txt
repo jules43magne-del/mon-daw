@@ -29,6 +29,7 @@ target_sources(MonDAW PRIVATE
     Source/Main.cpp
     Source/MainComponent.cpp
     Source/WaveformView.cpp
+    Source/LevelMeter.cpp
 )
 
 target_compile_definitions(MonDAW PRIVATE
