@@ -23,13 +23,14 @@ MainComponent::MainComponent()
     volumeLabel.setJustificationType (juce::Justification::centred);
     addAndMakeVisible (volumeLabel);
     addAndMakeVisible (fileLabel);
+    addAndMakeVisible (waveformView);
 
     formatManager.registerBasicFormats();
     transportSource.addChangeListener (this);
     transportSource.setGain ((float) volumeSlider.getValue());
     updateButtons();
 
-    setSize (500, 320);
+    setSize (700, 460);
 
     // 0 entrée, 2 sorties (stéréo)
     setAudioChannels (0, 2);
@@ -71,6 +72,10 @@ void MainComponent::resized()
 {
     auto area = getLocalBounds().reduced (16);
 
+    // Bande du bas : la forme d'onde
+    waveformView.setBounds (area.removeFromBottom (140));
+    area.removeFromBottom (16);
+
     // Colonne de droite : le fader
     auto faderArea = area.removeFromRight (90);
     volumeLabel.setBounds (faderArea.removeFromTop (24));
@@ -109,6 +114,7 @@ void MainComponent::openButtonClicked()
             transportSource.setSource (newSource.get(), 0, nullptr, reader->sampleRate);
             readerSource = std::move (newSource);
             fileLabel.setText (file.getFileName(), juce::dontSendNotification);
+            waveformView.setFile (file);
             updateButtons();
         }
     });
