@@ -33,16 +33,31 @@ void TrackRow::chooseFile()
         if (file == juce::File{})
             return; // l'utilisateur a annulé
 
-        if (track.loadFile (file))
-        {
-            fileLabel.setText (file.getFileName(), juce::dontSendNotification);
-            fileLabel.setColour (juce::Label::textColourId, juce::Colours::white);
-            waveform.setFile (file);
-
-            if (onFileLoaded)
-                onFileLoaded();
-        }
+        loadFile (file);
     });
+}
+
+bool TrackRow::loadFile (const juce::File& file)
+{
+    if (! track.loadFile (file))
+        return false;
+
+    fileLabel.setText (file.getFileName(), juce::dontSendNotification);
+    fileLabel.setColour (juce::Label::textColourId, juce::Colours::white);
+    waveform.setFile (file);
+
+    if (onFileLoaded)
+        onFileLoaded();
+
+    return true;
+}
+
+void TrackRow::clear()
+{
+    track.clear();
+    fileLabel.setText ("(vide)", juce::dontSendNotification);
+    fileLabel.setColour (juce::Label::textColourId, juce::Colours::grey);
+    waveform.clear();
 }
 
 void TrackRow::paint (juce::Graphics& g)

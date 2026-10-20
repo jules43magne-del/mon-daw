@@ -46,6 +46,30 @@ void MixerStrip::setName (const juce::String& name)
     nameLabel.setText (name, juce::dontSendNotification);
 }
 
+void MixerStrip::setGain (float gain)
+{
+    fader.setValue (gain, juce::sendNotificationSync); // déclenche fader.onValueChange
+}
+
+void MixerStrip::setPan (float pan)
+{
+    panKnob.setValue (pan, juce::sendNotificationSync); // déclenche panKnob.onValueChange
+}
+
+void MixerStrip::setMute (bool shouldMute)
+{
+    muteButton.setToggleState (shouldMute, juce::dontSendNotification);
+    if (onMuteChange)
+        onMuteChange (shouldMute);
+}
+
+void MixerStrip::setSolo (bool shouldSolo)
+{
+    soloButton.setToggleState (shouldSolo, juce::dontSendNotification);
+    if (onSoloChange)
+        onSoloChange (shouldSolo);
+}
+
 void MixerStrip::paint (juce::Graphics& g)
 {
     // Un fond légèrement plus clair et un cadre, pour bien séparer les tranches.

@@ -13,6 +13,13 @@ public:
     MixerStrip (const juce::String& name, bool isMaster);
 
     void setName (const juce::String& name);
+
+    // Changent un réglage depuis le programme (par exemple à l'ouverture d'une session).
+    // L'affichage est mis à jour et le callback correspondant est appelé, comme si l'utilisateur l'avait fait.
+    void setGain (float gain);
+    void setPan (float pan);
+    void setMute (bool shouldMute);
+    void setSolo (bool shouldSolo);
     LevelMeter& getMeter() { return meter; }
 
     // Appelés quand l'utilisateur bouge un réglage.

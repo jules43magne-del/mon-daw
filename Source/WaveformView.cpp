@@ -19,6 +19,12 @@ void WaveformView::setFile (const juce::File& file)
     thumbnail.setSource (new juce::FileInputSource (file));
 }
 
+void WaveformView::clear()
+{
+    thumbnail.clear();
+    repaint();
+}
+
 void WaveformView::setTimelineLength (double seconds)
 {
     timelineLength = seconds;

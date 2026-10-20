@@ -6,7 +6,7 @@
 #include "MixerStrip.h"
 
 // La fenêtre principale :
-//  - en haut, la barre de transport (Lecture / Pause / Stop et compteur de temps) ;
+//  - en haut, la barre de transport (Lecture / Pause / Stop, compteur de temps, sessions) ;
 //  - au milieu, la vue Édition : une ligne par piste avec sa forme d'onde ;
 //  - en bas, la console de mixage : une tranche par piste, plus le Master.
 class MainComponent : public juce::AudioAppComponent,
@@ -35,6 +35,12 @@ private:
     double getPosition() const;
     bool anyTrackLoaded() const;
     void updateTimeline();
+
+    // Sessions : un fichier .mondaw qui retient les fichiers des pistes et tous les réglages.
+    void chooseSessionToSave();
+    void chooseSessionToOpen();
+    bool saveSession (const juce::File& sessionFile);
+    bool openSession (const juce::File& sessionFile);
     void timerCallback() override;
 
     // Audio
@@ -49,6 +55,10 @@ private:
     juce::TextButton pauseButton { "Pause" };
     juce::TextButton stopButton { "Stop" };
     juce::Label timeLabel;
+    juce::TextButton openSessionButton { "Ouvrir..." };
+    juce::TextButton saveSessionButton { "Enregistrer..." };
+    std::unique_ptr<juce::FileChooser> sessionChooser;
+    juce::File currentSessionFile;
 
     // Vues
     juce::OwnedArray<TrackRow> rows;

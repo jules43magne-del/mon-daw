@@ -40,6 +40,11 @@ MainComponent::MainComponent()
     addAndMakeVisible (pauseButton);
     addAndMakeVisible (stopButton);
 
+    openSessionButton.onClick = [this] { chooseSessionToOpen(); };
+    saveSessionButton.onClick = [this] { chooseSessionToSave(); };
+    addAndMakeVisible (openSessionButton);
+    addAndMakeVisible (saveSessionButton);
+
     timeLabel.setFont (juce::FontOptions (22.0f, juce::Font::bold));
     timeLabel.setJustificationType (juce::Justification::centredRight);
     addAndMakeVisible (timeLabel);
@@ -150,6 +155,149 @@ void MainComponent::timerCallback()
 }
 
 //==============================================================================
+// Sessions
+//
+// Une session est un petit fichier texte au format XML, par exemple :
+//
+//   <MonDAWSession version="1">
+//     <Master gain="0.8"/>
+//     <Track number="1" file="C:\Users\...\batterie.wav" relativeFile="batterie.wav"
+//            gain="0.8" pan="0" mute="0" solo="0"/>
+//     ...
+//   </MonDAWSession>
+//
+// Les fichiers audio ne sont pas copiés : la session retient seulement où ils se trouvent.
+
+void MainComponent::chooseSessionToSave()
+{
+    sessionChooser = std::make_unique<juce::FileChooser> ("Enregistrer la session",
+                                                          currentSessionFile,
+                                                          "*.mondaw");
+
+    auto chooserFlags = juce::FileBrowserComponent::saveMode
+               | juce::FileBrowserComponent::canSelectFiles
+               | juce::FileBrowserComponent::warnAboutOverwriting;
+
+    sessionChooser->launchAsync (chooserFlags, [this] (const juce::FileChooser& fc)
+    {
+        auto file = fc.getResult();
+        if (file == juce::File{})
+            return; // l'utilisateur a annulé
+
+        if (! saveSession (file.withFileExtension ("mondaw")))
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                                                    "Erreur", "Impossible d'enregistrer la session.");
+    });
+}
+
+void MainComponent::chooseSessionToOpen()
+{
+    sessionChooser = std::make_unique<juce::FileChooser> ("Ouvrir une session",
+                                                          currentSessionFile,
+                                                          "*.mondaw");
+
+    auto chooserFlags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+
+    sessionChooser->launchAsync (chooserFlags, [this] (const juce::FileChooser& fc)
+    {
+        auto file = fc.getResult();
+        if (file == juce::File{})
+            return; // l'utilisateur a annulé
+
+        if (! openSession (file))
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                                                    "Erreur", "Ce fichier n'est pas une session MonDAW valide.");
+    });
+}
+
+bool MainComponent::saveSession (const juce::File& sessionFile)
+{
+    juce::XmlElement session ("MonDAWSession");
+    session.setAttribute ("version", 1);
+
+    session.createNewChildElement ("Master")->setAttribute ("gain", juce::String (masterGain.load(), 2));
+
+    for (int i = 0; i < tracks.size(); ++i)
+    {
+        auto* track = tracks[i];
+        auto* xml = session.createNewChildElement ("Track");
+        xml->setAttribute ("number", i + 1);
+
+        if (track->hasFile())
+        {
+            // On garde le chemin complet, et aussi le chemin depuis le dossier de la session :
+            // si tu déplaces le dossier entier (session + sons), la session les retrouvera quand même.
+            xml->setAttribute ("file", track->getFile().getFullPathName());
+            xml->setAttribute ("relativeFile", track->getFile().getRelativePathFrom (sessionFile.getParentDirectory()));
+        }
+
+        xml->setAttribute ("gain", juce::String (track->gain.load(), 2)); // 2 chiffres après la virgule suffisent
+        xml->setAttribute ("pan", juce::String (track->pan.load(), 2));
+        xml->setAttribute ("mute", track->mute.load());
+        xml->setAttribute ("solo", track->solo.load());
+    }
+
+    if (! session.writeTo (sessionFile))
+        return false;
+
+    currentSessionFile = sessionFile;
+    return true;
+}
+
+bool MainComponent::openSession (const juce::File& sessionFile)
+{
+    auto session = juce::XmlDocument::parse (sessionFile);
+    if (session == nullptr || ! session->hasTagName ("MonDAWSession"))
+        return false;
+
+    stop();
+
+    if (auto* master = session->getChildByName ("Master"))
+        masterStrip.setGain ((float) master->getDoubleAttribute ("gain", 0.8));
+
+    juce::StringArray missingFiles;
+
+    for (int i = 0; i < tracks.size(); ++i)
+    {
+        // On cherche la ligne <Track number="i+1">. Si elle n'existe pas, la piste reste vide.
+        auto* xml = session->getChildByAttribute ("number", juce::String (i + 1));
+
+        rows[i]->clear();
+        strips[i]->setName ("Piste " + juce::String (i + 1));
+
+        if (xml == nullptr)
+            continue;
+
+        if (xml->hasAttribute ("file"))
+        {
+            // D'abord à côté de la session, sinon à l'emplacement d'origine.
+            auto file = sessionFile.getParentDirectory().getChildFile (xml->getStringAttribute ("relativeFile"));
+            if (! file.existsAsFile())
+                file = juce::File (xml->getStringAttribute ("file"));
+
+            if (! rows[i]->loadFile (file))
+                missingFiles.add (xml->getStringAttribute ("file"));
+        }
+
+        strips[i]->setGain ((float) xml->getDoubleAttribute ("gain", 0.8));
+        strips[i]->setPan ((float) xml->getDoubleAttribute ("pan", 0.0));
+        strips[i]->setMute (xml->getBoolAttribute ("mute", false));
+        strips[i]->setSolo (xml->getBoolAttribute ("solo", false));
+    }
+
+    updateTimeline();
+    seekAll (0.0);
+    currentSessionFile = sessionFile;
+
+    if (! missingFiles.isEmpty())
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                                                "Fichiers introuvables",
+                                                juce::String (juce::CharPointer_UTF8 ("Ces fichiers n'ont pas \xc3\xa9t\xc3\xa9 retrouv\xc3\xa9s :\n")) + missingFiles.joinIntoString ("\n"));
+
+    return true;
+}
+
+//==============================================================================
 // Audio
 
 void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
@@ -238,6 +386,12 @@ void MainComponent::resized()
     pauseButton.setBounds (transportBar.removeFromLeft (110));
     transportBar.removeFromLeft (8);
     stopButton.setBounds (transportBar.removeFromLeft (110));
+
+    // Sessions à droite, le compteur entre les deux.
+    saveSessionButton.setBounds (transportBar.removeFromRight (120));
+    transportBar.removeFromRight (8);
+    openSessionButton.setBounds (transportBar.removeFromRight (120));
+    transportBar.removeFromRight (16);
     timeLabel.setBounds (transportBar);
 
     area.removeFromTop (12);
