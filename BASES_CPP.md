@@ -2,6 +2,8 @@
 
 Ce guide n'essaie pas de tout couvrir. Il explique juste ce qu'il faut pour **lire et modifier** le code du projet. Chaque notion renvoie à un endroit réel du code.
 
+> Les exemples viennent de la version de l'étape 1. Depuis l'étape 4, le lecteur est devenu multipiste : les mêmes idées se retrouvent dans `Track.cpp`, `MixerStrip.cpp` et `MainComponent.cpp`.
+
 ## 1. Compiler, c'est traduire
 
 Le C++ est un langage **compilé** : on écrit du texte (`.cpp`, `.h`), un programme appelé *compilateur* le traduit en `.exe`. Si le code contient une faute, la compilation échoue et te dit à quelle ligne. C'est normal et fréquent : lis le **premier** message d'erreur, c'est souvent le seul qui compte.

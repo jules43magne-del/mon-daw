@@ -2,39 +2,52 @@
 
 MainComponent::MainComponent()
 {
-    // Boutons
-    addAndMakeVisible (openButton);
-    openButton.onClick = [this] { openButtonClicked(); };
-
-    addAndMakeVisible (playButton);
-    playButton.onClick = [this] { transportSource.start(); };
-
-    addAndMakeVisible (pauseButton);
-    pauseButton.onClick = [this] { transportSource.stop(); }; // s'arrête sans revenir au début
-
-    addAndMakeVisible (stopButton);
-    stopButton.onClick = [this] { transportSource.stop(); transportSource.setPosition (0.0); };
-
-    // Fader de volume, vertical comme sur une console de mixage
-    volumeSlider.setSliderStyle (juce::Slider::LinearVertical);
-    volumeSlider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 70, 20);
-    volumeSlider.setRange (0.0, 1.0, 0.01);
-    volumeSlider.setValue (0.8);
-    volumeSlider.onValueChange = [this] { transportSource.setGain ((float) volumeSlider.getValue()); };
-    addAndMakeVisible (volumeSlider);
-
-    volumeLabel.setJustificationType (juce::Justification::centred);
-    addAndMakeVisible (volumeLabel);
-    addAndMakeVisible (levelMeter);
-    addAndMakeVisible (fileLabel);
-    addAndMakeVisible (waveformView);
-
     formatManager.registerBasicFormats();
-    transportSource.addChangeListener (this);
-    transportSource.setGain ((float) volumeSlider.getValue());
-    updateButtons();
 
-    setSize (700, 460);
+    for (int i = 0; i < numTracks; ++i)
+    {
+        auto* track = tracks.add (new Track (formatManager));
+
+        // Ligne de la vue Édition
+        auto* row = rows.add (new TrackRow (i + 1, *track, formatManager));
+        row->onFileLoaded = [this, i]
+        {
+            strips[i]->setName (tracks[i]->getFile().getFileNameWithoutExtension());
+            updateTimeline();
+            seekAll (getPosition()); // la nouvelle piste se cale sur les autres
+        };
+        row->getWaveform().onSeek = [this] (double seconds) { seekAll (seconds); };
+        row->getWaveform().getPosition = [this] { return getPosition(); };
+        addAndMakeVisible (row);
+
+        // Tranche de la console : chaque réglage met à jour la piste correspondante.
+        auto* strip = strips.add (new MixerStrip ("Piste " + juce::String (i + 1), false));
+        strip->onGainChange = [track] (float value) { track->gain = value; };
+        strip->onPanChange  = [track] (float value) { track->pan = value; };
+        strip->onMuteChange = [track] (bool value)  { track->mute = value; };
+        strip->onSoloChange = [track] (bool value)  { track->solo = value; };
+        addAndMakeVisible (strip);
+    }
+
+    masterStrip.onGainChange = [this] (float value) { masterGain = value; };
+    addAndMakeVisible (masterStrip);
+
+    // Barre de transport
+    playButton.onClick  = [this] { play(); };
+    pauseButton.onClick = [this] { pause(); };
+    stopButton.onClick  = [this] { stop(); };
+    addAndMakeVisible (playButton);
+    addAndMakeVisible (pauseButton);
+    addAndMakeVisible (stopButton);
+
+    timeLabel.setFont (juce::FontOptions (22.0f, juce::Font::bold));
+    timeLabel.setJustificationType (juce::Justification::centredRight);
+    addAndMakeVisible (timeLabel);
+
+    startTimerHz (15);
+    timerCallback();
+
+    setSize (1000, 760);
 
     // 0 entrée, 2 sorties (stéréo)
     setAudioChannels (0, 2);
@@ -45,31 +58,169 @@ MainComponent::~MainComponent()
     shutdownAudio();
 }
 
+//==============================================================================
+// Transport
+
+void MainComponent::play()
+{
+    // Si toutes les pistes sont arrivées au bout, on repart du début.
+    bool allFinished = true;
+    for (auto* track : tracks)
+        if (track->hasFile() && ! track->getTransport().hasStreamFinished())
+            allFinished = false;
+
+    if (allFinished)
+        seekAll (0.0);
+
+    playing = true;
+}
+
+void MainComponent::pause()
+{
+    playing = false; // le mixeur arrête de faire avancer les pistes, la position est conservée
+}
+
+void MainComponent::stop()
+{
+    playing = false;
+    seekAll (0.0);
+}
+
+void MainComponent::seekAll (double seconds)
+{
+    for (auto* track : tracks)
+        track->seek (seconds);
+}
+
+double MainComponent::getPosition() const
+{
+    // Toutes les pistes avancent ensemble : on prend la plus avancée
+    // (une piste plus courte s'arrête à sa fin).
+    double position = 0.0;
+    for (auto* track : tracks)
+        if (track->hasFile())
+            position = juce::jmax (position, track->getTransport().getCurrentPosition());
+    return position;
+}
+
+bool MainComponent::anyTrackLoaded() const
+{
+    for (auto* track : tracks)
+        if (track->hasFile())
+            return true;
+    return false;
+}
+
+void MainComponent::updateTimeline()
+{
+    // Toutes les formes d'onde partagent la même échelle de temps : celle de la piste la plus longue.
+    double longest = 0.0;
+    for (auto* track : tracks)
+        longest = juce::jmax (longest, track->getLengthInSeconds());
+
+    for (auto* row : rows)
+        row->getWaveform().setTimelineLength (longest);
+}
+
+void MainComponent::timerCallback()
+{
+    // Fin du morceau : plus aucune piste ne joue.
+    if (playing)
+    {
+        bool anyRunning = false;
+        for (auto* track : tracks)
+            if (track->hasFile() && track->getTransport().isPlaying())
+                anyRunning = true;
+
+        if (! anyRunning)
+            playing = false;
+    }
+
+    // Compteur "minutes:secondes.dixièmes"
+    const double position = getPosition();
+    const int minutes = (int) position / 60;
+    const double seconds = position - minutes * 60;
+    timeLabel.setText (juce::String (minutes) + ":" + juce::String (seconds, 1).paddedLeft ('0', 4),
+                       juce::dontSendNotification);
+
+    const bool loaded = anyTrackLoaded();
+    playButton.setEnabled (loaded && ! playing);
+    pauseButton.setEnabled (playing);
+    stopButton.setEnabled (loaded);
+}
+
+//==============================================================================
+// Audio
+
 void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
-    transportSource.prepareToPlay (samplesPerBlockExpected, sampleRate);
+    for (auto* track : tracks)
+        track->getTransport().prepareToPlay (samplesPerBlockExpected, sampleRate);
+
+    // On réserve la mémoire maintenant, pas dans getNextAudioBlock (règle d'or du temps réel).
+    trackBuffer.setSize (2, samplesPerBlockExpected * 2);
 }
 
 void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
 {
-    // Sans fichier, on envoie du silence.
-    if (readerSource == nullptr)
-    {
-        bufferToFill.clearActiveBufferRegion();
+    bufferToFill.clearActiveBufferRegion();
+
+    // En pause ou à l'arrêt : silence, et les pistes n'avancent pas.
+    if (! playing)
         return;
+
+    auto& output = *bufferToFill.buffer;
+    const int numSamples = bufferToFill.numSamples;
+    const int numOutputChannels = juce::jmin (2, output.getNumChannels());
+
+    // Garde-fou : si la carte son envoie un bloc plus grand que prévu, on agrandit le brouillon.
+    trackBuffer.setSize (2, numSamples, false, false, true);
+
+    // Si au moins une piste est en solo, seules les pistes en solo s'entendent.
+    bool anySolo = false;
+    for (auto* track : tracks)
+        if (track->solo)
+            anySolo = true;
+
+    for (int i = 0; i < tracks.size(); ++i)
+    {
+        auto* track = tracks[i];
+
+        // 1. On lit le bloc de la piste (même muette, pour qu'elle avance avec les autres).
+        juce::AudioSourceChannelInfo trackInfo (&trackBuffer, 0, numSamples);
+        track->getTransport().getNextAudioBlock (trackInfo);
+
+        // 2. Volume et panoramique "à puissance constante" : le son garde la même force au centre et sur les côtés.
+        const bool audible = ! track->mute && (! anySolo || track->solo);
+        const float gain = audible ? track->gain.load() : 0.0f;
+        const float angle = (track->pan.load() + 1.0f) * juce::MathConstants<float>::pi / 4.0f;
+        trackBuffer.applyGain (0, 0, numSamples, gain * std::cos (angle));
+        trackBuffer.applyGain (1, 0, numSamples, gain * std::sin (angle));
+
+        // 3. Vumètre de la piste
+        auto& meter = strips[i]->getMeter();
+        meter.setLevel (0, trackBuffer.getMagnitude (0, 0, numSamples));
+        meter.setLevel (1, trackBuffer.getMagnitude (1, 0, numSamples));
+
+        // 4. On ajoute la piste au mixage (le "bus" Master).
+        for (int ch = 0; ch < numOutputChannels; ++ch)
+            output.addFrom (ch, bufferToFill.startSample, trackBuffer, ch, 0, numSamples);
     }
 
-    transportSource.getNextAudioBlock (bufferToFill);
-
-    // Mesure le pic de chaque canal (après le volume) et l'envoie au vumètre.
-    for (int ch = 0; ch < bufferToFill.buffer->getNumChannels(); ++ch)
-        levelMeter.setLevel (ch, bufferToFill.buffer->getMagnitude (ch, bufferToFill.startSample, bufferToFill.numSamples));
+    // Master : volume général et vumètre.
+    output.applyGain (bufferToFill.startSample, numSamples, masterGain.load());
+    for (int ch = 0; ch < numOutputChannels; ++ch)
+        masterStrip.getMeter().setLevel (ch, output.getMagnitude (ch, bufferToFill.startSample, numSamples));
 }
 
 void MainComponent::releaseResources()
 {
-    transportSource.releaseResources();
+    for (auto* track : tracks)
+        track->getTransport().releaseResources();
 }
+
+//==============================================================================
+// Interface
 
 void MainComponent::paint (juce::Graphics& g)
 {
@@ -78,78 +229,33 @@ void MainComponent::paint (juce::Graphics& g)
 
 void MainComponent::resized()
 {
-    auto area = getLocalBounds().reduced (16);
+    auto area = getLocalBounds().reduced (12);
 
-    // Bande du bas : la forme d'onde
-    waveformView.setBounds (area.removeFromBottom (140));
-    area.removeFromBottom (16);
+    // Barre de transport
+    auto transportBar = area.removeFromTop (40);
+    playButton.setBounds (transportBar.removeFromLeft (110));
+    transportBar.removeFromLeft (8);
+    pauseButton.setBounds (transportBar.removeFromLeft (110));
+    transportBar.removeFromLeft (8);
+    stopButton.setBounds (transportBar.removeFromLeft (110));
+    timeLabel.setBounds (transportBar);
 
-    // Colonne de droite : le fader et, à côté, le vumètre
-    auto faderArea = area.removeFromRight (130);
-    volumeLabel.setBounds (faderArea.removeFromTop (24));
-    auto meterArea = faderArea.removeFromRight (30);
-    levelMeter.setBounds (meterArea.withTrimmedBottom (24)); // s'arrête au-dessus de la case du volume
-    faderArea.removeFromRight (10);
-    volumeSlider.setBounds (faderArea);
+    area.removeFromTop (12);
 
-    area.removeFromRight (16);
-
-    // Colonne de gauche : les boutons empilés
-    openButton.setBounds (area.removeFromTop (40));
-    area.removeFromTop (10);
-    fileLabel.setBounds (area.removeFromTop (24));
-    area.removeFromTop (10);
-    playButton.setBounds (area.removeFromTop (40));
-    area.removeFromTop (10);
-    pauseButton.setBounds (area.removeFromTop (40));
-    area.removeFromTop (10);
-    stopButton.setBounds (area.removeFromTop (40));
-}
-
-void MainComponent::openButtonClicked()
-{
-    chooser = std::make_unique<juce::FileChooser> ("Choisis un fichier audio",
-                                                   juce::File{},
-                                                   "*.wav;*.aif;*.aiff");
-
-    auto chooserFlags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
-
-    chooser->launchAsync (chooserFlags, [this] (const juce::FileChooser& fc)
+    // Console de mixage en bas : une tranche par piste, le Master à droite.
+    auto mixerArea = area.removeFromBottom (300);
+    masterStrip.setBounds (mixerArea.removeFromRight (110));
+    mixerArea.removeFromRight (16);
+    for (auto* strip : strips)
     {
-        auto file = fc.getResult();
-        if (file == juce::File{})
-            return; // l'utilisateur a annulé
-
-        if (auto* reader = formatManager.createReaderFor (file))
-        {
-            auto newSource = std::make_unique<juce::AudioFormatReaderSource> (reader, true);
-            transportSource.stop();
-            transportSource.setSource (newSource.get(), 0, nullptr, reader->sampleRate);
-            readerSource = std::move (newSource);
-            fileLabel.setText (file.getFileName(), juce::dontSendNotification);
-            waveformView.setFile (file);
-            updateButtons();
-        }
-    });
-}
-
-void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
-{
-    // Appelé quand la lecture démarre ou s'arrête (y compris en fin de fichier).
-    if (source == &transportSource)
-    {
-        if (! transportSource.isPlaying() && transportSource.hasStreamFinished())
-            transportSource.setPosition (0.0);
-
-        updateButtons();
+        strip->setBounds (mixerArea.removeFromLeft (110));
+        mixerArea.removeFromLeft (8);
     }
-}
 
-void MainComponent::updateButtons()
-{
-    const bool hasFile = readerSource != nullptr;
-    const bool playing = transportSource.isPlaying();
-    playButton.setEnabled (hasFile && ! playing);
-    pauseButton.setEnabled (hasFile && playing);
-    stopButton.setEnabled (hasFile);
+    area.removeFromBottom (12);
+
+    // Vue Édition : les pistes se partagent la hauteur restante.
+    const int rowHeight = area.getHeight() / numTracks;
+    for (auto* row : rows)
+        row->setBounds (area.removeFromTop (rowHeight).reduced (0, 3));
 }

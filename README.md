@@ -6,7 +6,9 @@ Un DAW maison en C++ avec [JUCE](https://juce.com) : création façon Ableton, m
 
 **Étape 2** : la forme d'onde du fichier s'affiche, avec une tête de lecture ; un clic dans la forme d'onde déplace la lecture. Un bouton Pause s'arrête sans revenir au début.
 
-**Étape 3 (actuelle)** : un vumètre stéréo à côté du fader montre le niveau du son en direct.
+**Étape 3** : un vumètre stéréo à côté du fader montre le niveau du son en direct.
+
+**Étape 4 (actuelle)** : 4 pistes jouées ensemble. En haut, la vue Édition (une forme d'onde par piste, sur une échelle de temps commune). En bas, la console de mixage façon Pro Tools : pour chaque piste Mute, Solo, panoramique, fader et vumètre, plus un Master.
 
 ## Installer les outils sur Windows (une seule fois)
 
@@ -38,13 +40,16 @@ Plus simple encore : dans Visual Studio, **Fichier > Ouvrir > Dossier** sur `mon
 |---|---|
 | `CMakeLists.txt` | La « recette » de construction : récupère JUCE et déclare l'application. |
 | `Source/Main.cpp` | Point d'entrée : crée la fenêtre. |
-| `Source/MainComponent.h` | Déclare ce que contient la fenêtre (boutons, fader, moteur audio). |
-| `Source/MainComponent.cpp` | Le comportement : ouvrir un fichier, jouer, arrêter, régler le volume. |
-| `Source/WaveformView.h/.cpp` | Le composant qui dessine la forme d'onde et la tête de lecture. |
+| `Source/MainComponent.h/.cpp` | La fenêtre : barre de transport, disposition, et le moteur de mixage (`getNextAudioBlock`). |
+| `Source/Track.h/.cpp` | Le « modèle » d'une piste : son fichier et ses réglages (volume, panoramique, mute, solo). |
+| `Source/TrackRow.h/.cpp` | Une ligne de la vue Édition : bouton Charger, nom du fichier, forme d'onde. |
+| `Source/MixerStrip.h/.cpp` | Une tranche de la console : Mute, Solo, panoramique, fader, vumètre. |
+| `Source/WaveformView.h/.cpp` | Dessine une forme d'onde et la tête de lecture. |
 | `Source/LevelMeter.h/.cpp` | Le vumètre : reçoit le niveau depuis le thread audio et le dessine. |
 
 Pour apprendre les bases du C++ en lien avec ce code, lis [BASES_CPP.md](BASES_CPP.md).
 
 ## Prochaines étapes
 
-1. Passer à plusieurs pistes avec Tracktion Engine (clips façon Ableton, table de mixage façon Pro Tools).
+1. Enregistrer et rouvrir une session (quelles pistes, quels réglages).
+2. Déplacer les fichiers dans le temps (des « clips » placés sur une ligne de temps), puis passer à Tracktion Engine pour la partie création façon Ableton.

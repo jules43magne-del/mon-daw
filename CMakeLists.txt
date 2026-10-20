@@ -30,6 +30,9 @@ target_sources(MonDAW PRIVATE
     Source/MainComponent.cpp
     Source/WaveformView.cpp
     Source/LevelMeter.cpp
+    Source/MixerStrip.cpp
+    Source/Track.cpp
+    Source/TrackRow.cpp
 )
 
 target_compile_definitions(MonDAW PRIVATE
