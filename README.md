@@ -4,7 +4,9 @@ Un DAW maison en C++ avec [JUCE](https://juce.com) : création façon Ableton, m
 
 **Étape 1** : une fenêtre qui ouvre un fichier WAV, le joue avec Lecture/Stop, et règle le volume avec un fader.
 
-**Étape 2 (actuelle)** : la forme d'onde du fichier s'affiche, avec une tête de lecture ; un clic dans la forme d'onde déplace la lecture. Un bouton Pause s'arrête sans revenir au début.
+**Étape 2** : la forme d'onde du fichier s'affiche, avec une tête de lecture ; un clic dans la forme d'onde déplace la lecture. Un bouton Pause s'arrête sans revenir au début.
+
+**Étape 3 (actuelle)** : un vumètre stéréo à côté du fader montre le niveau du son en direct.
 
 ## Installer les outils sur Windows (une seule fois)
 
@@ -39,10 +41,10 @@ Plus simple encore : dans Visual Studio, **Fichier > Ouvrir > Dossier** sur `mon
 | `Source/MainComponent.h` | Déclare ce que contient la fenêtre (boutons, fader, moteur audio). |
 | `Source/MainComponent.cpp` | Le comportement : ouvrir un fichier, jouer, arrêter, régler le volume. |
 | `Source/WaveformView.h/.cpp` | Le composant qui dessine la forme d'onde et la tête de lecture. |
+| `Source/LevelMeter.h/.cpp` | Le vumètre : reçoit le niveau depuis le thread audio et le dessine. |
 
 Pour apprendre les bases du C++ en lien avec ce code, lis [BASES_CPP.md](BASES_CPP.md).
 
 ## Prochaines étapes
 
-1. Ajouter un vumètre à côté du fader.
-2. Passer à plusieurs pistes avec Tracktion Engine (clips façon Ableton, table de mixage façon Pro Tools).
+1. Passer à plusieurs pistes avec Tracktion Engine (clips façon Ableton, table de mixage façon Pro Tools).
