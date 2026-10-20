@@ -1,13 +1,16 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "WaveformView.h"
-#include "LevelMeter.h"
+#include "Track.h"
+#include "TrackRow.h"
+#include "MixerStrip.h"
 
-// Le contenu de la fenêtre : boutons, fader de volume, et lecture audio.
-// AudioAppComponent nous donne directement accès à la carte son.
+// La fenêtre principale :
+//  - en haut, la barre de transport (Lecture / Pause / Stop et compteur de temps) ;
+//  - au milieu, la vue Édition : une ligne par piste avec sa forme d'onde ;
+//  - en bas, la console de mixage : une tranche par piste, plus le Master.
 class MainComponent : public juce::AudioAppComponent,
-                      private juce::ChangeListener
+                      private juce::Timer
 {
 public:
     MainComponent();
@@ -23,28 +26,34 @@ public:
     void resized() override;
 
 private:
-    void openButtonClicked();
-    void changeListenerCallback (juce::ChangeBroadcaster* source) override;
-    void updateButtons();
+    static constexpr int numTracks = 4;
 
-    // Interface
-    juce::TextButton openButton { "Ouvrir un WAV..." };
+    void play();
+    void pause();
+    void stop();
+    void seekAll (double seconds);
+    double getPosition() const;
+    bool anyTrackLoaded() const;
+    void updateTimeline();
+    void timerCallback() override;
+
+    // Audio
+    juce::AudioFormatManager formatManager;      // sait lire WAV, AIFF...
+    juce::OwnedArray<Track> tracks;              // OwnedArray détruit ses éléments tout seul
+    juce::AudioBuffer<float> trackBuffer;        // brouillon pour mixer une piste, préparé à l'avance
+    std::atomic<bool> playing { false };
+    std::atomic<float> masterGain { 0.8f };
+
+    // Barre de transport
     juce::TextButton playButton { "Lecture" };
     juce::TextButton pauseButton { "Pause" };
     juce::TextButton stopButton { "Stop" };
-    juce::Slider volumeSlider;
-    juce::Label volumeLabel { {}, "Volume" };
-    LevelMeter levelMeter;
-    juce::Label fileLabel { {}, "Aucun fichier" };
+    juce::Label timeLabel;
 
-    // Audio
-    juce::AudioFormatManager formatManager;                       // sait lire WAV, AIFF...
-    std::unique_ptr<juce::AudioFormatReaderSource> readerSource;  // le fichier ouvert
-    juce::AudioTransportSource transportSource;                   // lecture / stop / volume
-    std::unique_ptr<juce::FileChooser> chooser;
-
-    // Déclaré après formatManager et transportSource, car il les utilise.
-    WaveformView waveformView { formatManager, transportSource };
+    // Vues
+    juce::OwnedArray<TrackRow> rows;
+    juce::OwnedArray<MixerStrip> strips;
+    MixerStrip masterStrip { "Master", true };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
