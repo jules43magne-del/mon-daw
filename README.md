@@ -10,7 +10,9 @@ Un DAW maison en C++ avec [JUCE](https://juce.com) : création façon Ableton, m
 
 **Étape 4** : 4 pistes jouées ensemble. En haut, la vue Édition (une forme d'onde par piste, sur une échelle de temps commune). En bas, la console de mixage façon Pro Tools : pour chaque piste Mute, Solo, panoramique, fader et vumètre, plus un Master.
 
-**Étape 5 (actuelle)** : les boutons « Enregistrer... » et « Ouvrir... » sauvent et rouvrent une session (`.mondaw`) avec les sons de chaque piste et tous les réglages.
+**Étape 5** : les boutons « Enregistrer... » et « Ouvrir... » sauvent et rouvrent une session (`.mondaw`) avec les sons de chaque piste et tous les réglages.
+
+**Étape 6 (actuelle)** : des clips sur une ligne de temps. Chaque piste peut contenir plusieurs sons, qu'on ajoute d'un double-clic, qu'on déplace en les glissant et qu'on supprime d'un clic droit. Une règle graduée et une tête de lecture couvrent toutes les pistes.
 
 ## Installer les outils sur Windows (une seule fois)
 
@@ -43,10 +45,12 @@ Plus simple encore : dans Visual Studio, **Fichier > Ouvrir > Dossier** sur `mon
 | `CMakeLists.txt` | La « recette » de construction : récupère JUCE et déclare l'application. |
 | `Source/Main.cpp` | Point d'entrée : crée la fenêtre. |
 | `Source/MainComponent.h/.cpp` | La fenêtre : barre de transport, disposition, et le moteur de mixage (`getNextAudioBlock`). |
-| `Source/Track.h/.cpp` | Le « modèle » d'une piste : son fichier et ses réglages (volume, panoramique, mute, solo). |
-| `Source/TrackRow.h/.cpp` | Une ligne de la vue Édition : bouton Charger, nom du fichier, forme d'onde. |
+| `Source/Track.h/.cpp` | Le « modèle » d'une piste : ses clips et ses réglages (volume, panoramique, mute, solo). |
+| `Source/Clip.h/.cpp` | Un clip : un son chargé en mémoire et sa position de départ. |
+| `Source/Timeline.h` | La conversion temps ↔ pixels, la règle graduée et la ligne de tête de lecture. |
+| `Source/TrackRow.h/.cpp` | Une ligne de la vue Édition : nom de piste, bouton « Ajouter un son... » et la bande des clips. |
+| `Source/ClipComponent.h/.cpp` | Un clip à l'écran : forme d'onde, glisser pour déplacer, clic droit pour supprimer. |
 | `Source/MixerStrip.h/.cpp` | Une tranche de la console : Mute, Solo, panoramique, fader, vumètre. |
-| `Source/WaveformView.h/.cpp` | Dessine une forme d'onde et la tête de lecture. |
 | `Source/LevelMeter.h/.cpp` | Le vumètre : reçoit le niveau depuis le thread audio et le dessine. |
 
 Pour comprendre chaque étape en détail, avec des exercices, lis [GUIDE_ETAPES.md](GUIDE_ETAPES.md). Pour les bases du C++ en lien avec ce code, lis [BASES_CPP.md](BASES_CPP.md).
