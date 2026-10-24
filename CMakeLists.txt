@@ -28,8 +28,9 @@ juce_generate_juce_header(MonDAW)
 target_sources(MonDAW PRIVATE
     Source/Main.cpp
     Source/MainComponent.cpp
-    Source/WaveformView.cpp
     Source/LevelMeter.cpp
+    Source/Clip.cpp
+    Source/ClipComponent.cpp
     Source/MixerStrip.cpp
     Source/Track.cpp
     Source/TrackRow.cpp

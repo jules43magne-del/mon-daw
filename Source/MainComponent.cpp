@@ -9,15 +9,10 @@ MainComponent::MainComponent()
         auto* track = tracks.add (new Track (formatManager));
 
         // Ligne de la vue Édition
-        auto* row = rows.add (new TrackRow (i + 1, *track, formatManager));
-        row->onFileLoaded = [this, i]
-        {
-            strips[i]->setName (tracks[i]->getFile().getFileNameWithoutExtension());
-            updateTimeline();
-            seekAll (getPosition()); // la nouvelle piste se cale sur les autres
-        };
-        row->getWaveform().onSeek = [this] (double seconds) { seekAll (seconds); };
-        row->getWaveform().getPosition = [this] { return getPosition(); };
+        auto* row = rows.add (new TrackRow (i + 1, *track, timelineScale, formatManager, thumbnailCache));
+        row->onClipsChanged = [this] { updateTimeline(); updateStripNames(); };
+        row->getPlayheadPosition = [this] { return getPosition(); };
+        row->getLane().onSeek = [this] (double seconds) { seekAll (seconds); };
         addAndMakeVisible (row);
 
         // Tranche de la console : chaque réglage met à jour la piste correspondante.
@@ -31,6 +26,12 @@ MainComponent::MainComponent()
 
     masterStrip.onGainChange = [this] (float value) { masterGain = value; };
     addAndMakeVisible (masterStrip);
+
+    // Règle et tête de lecture. La tête de lecture est ajoutée en dernier pour être dessinée par-dessus les pistes.
+    ruler.onSeek = [this] (double seconds) { seekAll (seconds); };
+    addAndMakeVisible (ruler);
+    playhead.getPosition = [this] { return getPosition(); };
+    addAndMakeVisible (playhead);
 
     // Barre de transport
     playButton.onClick  = [this] { play(); };
@@ -68,13 +69,8 @@ MainComponent::~MainComponent()
 
 void MainComponent::play()
 {
-    // Si toutes les pistes sont arrivées au bout, on repart du début.
-    bool allFinished = true;
-    for (auto* track : tracks)
-        if (track->hasFile() && ! track->getTransport().hasStreamFinished())
-            allFinished = false;
-
-    if (allFinished)
+    // Si on est arrivé après le dernier clip, on repart du début.
+    if (getPosition() >= getSongEnd())
         seekAll (0.0);
 
     playing = true;
@@ -93,53 +89,75 @@ void MainComponent::stop()
 
 void MainComponent::seekAll (double seconds)
 {
-    for (auto* track : tracks)
-        track->seek (seconds);
+    playPosition = (juce::int64) (juce::jmax (0.0, seconds) * deviceSampleRate.load());
+    playhead.repaint();
 }
 
 double MainComponent::getPosition() const
 {
-    // Toutes les pistes avancent ensemble : on prend la plus avancée
-    // (une piste plus courte s'arrête à sa fin).
-    double position = 0.0;
+    return (double) playPosition.load() / deviceSampleRate.load();
+}
+
+double MainComponent::getSongEnd() const
+{
+    // La fin du morceau, c'est la fin du dernier clip, toutes pistes confondues.
+    double end = 0.0;
     for (auto* track : tracks)
-        if (track->hasFile())
-            position = juce::jmax (position, track->getTransport().getCurrentPosition());
-    return position;
+        end = juce::jmax (end, track->getEndSeconds());
+    return end;
 }
 
 bool MainComponent::anyTrackLoaded() const
 {
     for (auto* track : tracks)
-        if (track->hasFile())
+        if (track->hasClips())
             return true;
     return false;
 }
 
 void MainComponent::updateTimeline()
 {
-    // Toutes les formes d'onde partagent la même échelle de temps : celle de la piste la plus longue.
-    double longest = 0.0;
-    for (auto* track : tracks)
-        longest = juce::jmax (longest, track->getLengthInSeconds());
+    // La ligne de temps montre au moins 1 minute, et toujours 10 secondes de marge après le dernier clip,
+    // pour avoir de la place où glisser les clips. On arrondit à la dizaine de secondes.
+    const double wanted = std::ceil ((getSongEnd() + 10.0) / 10.0) * 10.0;
+    timelineScale.lengthSeconds = juce::jmax (60.0, wanted);
 
     for (auto* row : rows)
-        row->getWaveform().setTimelineLength (longest);
+        row->refresh();
+
+    ruler.repaint();
+    playhead.repaint();
+}
+
+void MainComponent::updateStripNames()
+{
+    // Chaque tranche prend le nom du premier clip de sa piste.
+    for (int i = 0; i < tracks.size(); ++i)
+    {
+        const auto& clips = tracks[i]->getClips();
+        strips[i]->setName (clips.empty() ? "Piste " + juce::String (i + 1)
+                                          : clips.front()->file.getFileNameWithoutExtension());
+    }
 }
 
 void MainComponent::timerCallback()
 {
-    // Fin du morceau : plus aucune piste ne joue.
-    if (playing)
+    // Si la carte son a changé de fréquence, on recharge les clips à la bonne fréquence.
+    for (auto* track : tracks)
     {
-        bool anyRunning = false;
-        for (auto* track : tracks)
-            if (track->hasFile() && track->getTransport().isPlaying())
-                anyRunning = true;
-
-        if (! anyRunning)
-            playing = false;
+        if (std::abs (track->getSampleRate() - deviceSampleRate.load()) >= 1.0)
+        {
+            track->setSampleRate (deviceSampleRate.load());
+            for (auto* row : rows)
+                row->getLane().rebuild();
+        }
     }
+
+    // Fin du morceau : la lecture a dépassé le dernier clip.
+    if (playing && getPosition() >= getSongEnd())
+        playing = false;
+
+    playhead.repaint();
 
     // Compteur "minutes:secondes.dixièmes"
     const double position = getPosition();
@@ -159,10 +177,12 @@ void MainComponent::timerCallback()
 //
 // Une session est un petit fichier texte au format XML, par exemple :
 //
-//   <MonDAWSession version="1">
-//     <Master gain="0.8"/>
-//     <Track number="1" file="C:\Users\...\batterie.wav" relativeFile="batterie.wav"
-//            gain="0.8" pan="0" mute="0" solo="0"/>
+//   <MonDAWSession version="2">
+//     <Master gain="0.80"/>
+//     <Track number="1" gain="0.80" pan="0.00" mute="0" solo="0">
+//       <Clip file="C:\Users\...\batterie.wav" relativeFile="batterie.wav" start="0.00"/>
+//       <Clip file="C:\Users\...\batterie.wav" relativeFile="batterie.wav" start="8.00"/>
+//     </Track>
 //     ...
 //   </MonDAWSession>
 //
@@ -213,7 +233,7 @@ void MainComponent::chooseSessionToOpen()
 bool MainComponent::saveSession (const juce::File& sessionFile)
 {
     juce::XmlElement session ("MonDAWSession");
-    session.setAttribute ("version", 1);
+    session.setAttribute ("version", 2);
 
     session.createNewChildElement ("Master")->setAttribute ("gain", juce::String (masterGain.load(), 2));
 
@@ -223,18 +243,20 @@ bool MainComponent::saveSession (const juce::File& sessionFile)
         auto* xml = session.createNewChildElement ("Track");
         xml->setAttribute ("number", i + 1);
 
-        if (track->hasFile())
-        {
-            // On garde le chemin complet, et aussi le chemin depuis le dossier de la session :
-            // si tu déplaces le dossier entier (session + sons), la session les retrouvera quand même.
-            xml->setAttribute ("file", track->getFile().getFullPathName());
-            xml->setAttribute ("relativeFile", track->getFile().getRelativePathFrom (sessionFile.getParentDirectory()));
-        }
-
         xml->setAttribute ("gain", juce::String (track->gain.load(), 2)); // 2 chiffres après la virgule suffisent
         xml->setAttribute ("pan", juce::String (track->pan.load(), 2));
         xml->setAttribute ("mute", track->mute.load());
         xml->setAttribute ("solo", track->solo.load());
+
+        for (auto& clip : track->getClips())
+        {
+            // On garde le chemin complet, et aussi le chemin depuis le dossier de la session :
+            // si tu déplaces le dossier entier (session + sons), la session les retrouvera quand même.
+            auto* clipXml = xml->createNewChildElement ("Clip");
+            clipXml->setAttribute ("file", clip->file.getFullPathName());
+            clipXml->setAttribute ("relativeFile", clip->file.getRelativePathFrom (sessionFile.getParentDirectory()));
+            clipXml->setAttribute ("start", juce::String (clip->startSeconds, 2));
+        }
     }
 
     if (! session.writeTo (sessionFile))
@@ -263,21 +285,28 @@ bool MainComponent::openSession (const juce::File& sessionFile)
         auto* xml = session->getChildByAttribute ("number", juce::String (i + 1));
 
         rows[i]->clear();
-        strips[i]->setName ("Piste " + juce::String (i + 1));
 
         if (xml == nullptr)
             continue;
 
-        if (xml->hasAttribute ("file"))
+        // Retrouve un son : d'abord à côté de la session, sinon à l'emplacement d'origine.
+        auto loadClip = [&] (const juce::XmlElement& clipXml)
         {
-            // D'abord à côté de la session, sinon à l'emplacement d'origine.
-            auto file = sessionFile.getParentDirectory().getChildFile (xml->getStringAttribute ("relativeFile"));
+            auto file = sessionFile.getParentDirectory().getChildFile (clipXml.getStringAttribute ("relativeFile"));
             if (! file.existsAsFile())
-                file = juce::File (xml->getStringAttribute ("file"));
+                file = juce::File (clipXml.getStringAttribute ("file"));
 
-            if (! rows[i]->loadFile (file))
-                missingFiles.add (xml->getStringAttribute ("file"));
-        }
+            if (! rows[i]->addClip (file, clipXml.getDoubleAttribute ("start", 0.0)))
+                missingFiles.addIfNotAlreadyThere (clipXml.getStringAttribute ("file"));
+        };
+
+        // Version 2 : une balise <Clip> par clip.
+        for (auto* clipXml : xml->getChildWithTagNameIterator ("Clip"))
+            loadClip (*clipXml);
+
+        // Version 1 (étape 5) : un seul fichier par piste, qui commence au début.
+        if (xml->hasAttribute ("file"))
+            loadClip (*xml);
 
         strips[i]->setGain ((float) xml->getDoubleAttribute ("gain", 0.8));
         strips[i]->setPan ((float) xml->getDoubleAttribute ("pan", 0.0));
@@ -286,6 +315,7 @@ bool MainComponent::openSession (const juce::File& sessionFile)
     }
 
     updateTimeline();
+    updateStripNames();
     seekAll (0.0);
     currentSessionFile = sessionFile;
 
@@ -302,8 +332,8 @@ bool MainComponent::openSession (const juce::File& sessionFile)
 
 void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
-    for (auto* track : tracks)
-        track->getTransport().prepareToPlay (samplesPerBlockExpected, sampleRate);
+    // Les clips seront convertis à cette fréquence (dans timerCallback, sur le thread de l'interface).
+    deviceSampleRate = sampleRate;
 
     // On réserve la mémoire maintenant, pas dans getNextAudioBlock (règle d'or du temps réel).
     trackBuffer.setSize (2, samplesPerBlockExpected * 2);
@@ -313,9 +343,12 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 {
     bufferToFill.clearActiveBufferRegion();
 
-    // En pause ou à l'arrêt : silence, et les pistes n'avancent pas.
+    // En pause ou à l'arrêt : silence, et la position n'avance pas.
     if (! playing)
         return;
+
+    // La position au début de ce bloc. Toutes les pistes lisent leurs clips à partir d'ici.
+    juce::int64 position = playPosition.load();
 
     auto& output = *bufferToFill.buffer;
     const int numSamples = bufferToFill.numSamples;
@@ -334,9 +367,9 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
     {
         auto* track = tracks[i];
 
-        // 1. On lit le bloc de la piste (même muette, pour qu'elle avance avec les autres).
-        juce::AudioSourceChannelInfo trackInfo (&trackBuffer, 0, numSamples);
-        track->getTransport().getNextAudioBlock (trackInfo);
+        // 1. On récupère le son des clips de la piste qui jouent pendant ce bloc.
+        trackBuffer.clear();
+        track->render (trackBuffer, numSamples, position);
 
         // 2. Volume et panoramique "à puissance constante" : le son garde la même force au centre et sur les côtés.
         const bool audible = ! track->mute && (! anySolo || track->solo);
@@ -359,12 +392,14 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
     output.applyGain (bufferToFill.startSample, numSamples, masterGain.load());
     for (int ch = 0; ch < numOutputChannels; ++ch)
         masterStrip.getMeter().setLevel (ch, output.getMagnitude (ch, bufferToFill.startSample, numSamples));
+
+    // On avance la position... sauf si l'interface l'a changée pendant ce bloc (clic sur la règle) :
+    // compare_exchange ne remplace la valeur que si elle vaut toujours "position".
+    playPosition.compare_exchange_strong (position, position + numSamples);
 }
 
 void MainComponent::releaseResources()
 {
-    for (auto* track : tracks)
-        track->getTransport().releaseResources();
 }
 
 //==============================================================================
@@ -408,8 +443,19 @@ void MainComponent::resized()
 
     area.removeFromBottom (12);
 
-    // Vue Édition : les pistes se partagent la hauteur restante.
+    // Vue Édition : la règle en haut, puis les pistes se partagent la hauteur restante.
+    // La règle et la tête de lecture sont alignées sur les voies des pistes (après la colonne de gauche).
+    const int laneLeft = TrackRow::padding + TrackRow::headerWidth + TrackRow::padding;
+    auto rulerArea = area.removeFromTop (24);
+    ruler.setBounds (rulerArea.withTrimmedLeft (laneLeft).withTrimmedRight (TrackRow::padding));
+
+    const auto editArea = area;
     const int rowHeight = area.getHeight() / numTracks;
     for (auto* row : rows)
         row->setBounds (area.removeFromTop (rowHeight).reduced (0, 3));
+
+    playhead.setBounds (rulerArea.getUnion (editArea).withTrimmedLeft (laneLeft).withTrimmedRight (TrackRow::padding));
+
+    for (auto* row : rows)
+        row->refresh();
 }
